@@ -6,6 +6,7 @@ import (
 	"cosmossdk.io/core/store"
 	"cosmossdk.io/depinject"
 	"cosmossdk.io/log"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/cosmos/cosmos-sdk/client"
@@ -24,6 +25,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	// this line is used by starport scaffolding # 1
 
@@ -442,7 +444,7 @@ func registerRESTRoutes(clientCtx client.Context, mux *runtime.ServeMux) {
 		//	return
 		//}
 		kr, err := keyring.New(
-			sdk.KeyringServiceName(),
+			"blog", // 앱 이름 (프로젝트 이름)
 			keyring.BackendTest,
 			clientCtx.HomeDir,
 			strings.NewReader(""),
@@ -499,7 +501,8 @@ func registerRESTRoutes(clientCtx client.Context, mux *runtime.ServeMux) {
 		err = clienttx.Sign(
 			context.Background(), // 컨텍스트 추가
 			txFactory,
-			reqBody.BaseReq.From, // 키 이름
+			"alice",
+			//reqBody.BaseReq.From, // 키 이름
 			txBuilder,
 			true, // 서명 시 덮어쓰기
 		)
@@ -507,7 +510,6 @@ func registerRESTRoutes(clientCtx client.Context, mux *runtime.ServeMux) {
 			http.Error(w, fmt.Sprintf("트랜잭션 서명 실패: %v", err), http.StatusInternalServerError)
 			return
 		}
-
 		// 서명된 트랜잭션을 바이트로 인코딩
 		txBytes, err := txCtx.TxConfig.TxEncoder()(txBuilder.GetTx())
 		if err != nil {
@@ -515,15 +517,44 @@ func registerRESTRoutes(clientCtx client.Context, mux *runtime.ServeMux) {
 			return
 		}
 
+		// 디버깅을 위해 txBytes를 Base64로 인코딩하여 로그 출력
+		txBytesBase64 := base64.StdEncoding.EncodeToString(txBytes)
+		fmt.Printf("인코딩된 트랜잭션 (Base64): %s\n", txBytesBase64)
+
+		// 트랜잭션 디코딩하여 내용 확인 (디버깅용)
+		decodedTx, err := txCtx.TxConfig.TxDecoder()(txBytes)
+		if err != nil {
+			fmt.Printf("트랜잭션 디코딩 실패 (오류는 무시됨): %v\n", err)
+		} else {
+			fmt.Printf("디코딩된 트랜잭션 내용: %+v\n", decodedTx)
+		}
+
 		// 트랜잭션 브로드캐스트
 		resp, err := txCtx.BroadcastTx(txBytes)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("트랜잭션 브로드캐스트 실패: %v", err), http.StatusInternalServerError)
+			// 더 자세한 오류 정보 포함
+			errMsg := fmt.Sprintf("트랜잭션 브로드캐스트 실패: %v\n트랜잭션 바이트 크기: %d 바이트", err, len(txBytes))
+			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
 
+		// 성공 시 트랜잭션 해시와 상태 정보 로깅
+		fmt.Printf("트랜잭션 성공: 해시=%s, 코드=%d, 로그=%s\n",
+			resp.TxHash, resp.Code, resp.RawLog)
+
+		// 트랜잭션 정보 추가
+		responseData := map[string]interface{}{
+			"tx_response":     resp,
+			"tx_bytes_base64": txBytesBase64,
+			"gas_info": map[string]interface{}{
+				"gas_wanted": resp.GasWanted,
+				"gas_used":   resp.GasUsed,
+			},
+			"timestamp": time.Now().Format(time.RFC3339),
+		}
+
 		// 응답 반환
-		respBytes, err := json.MarshalIndent(resp, "", "  ")
+		respBytes, err := json.MarshalIndent(responseData, "", "  ")
 		if err != nil {
 			http.Error(w, fmt.Sprintf("응답 인코딩 실패: %v", err), http.StatusInternalServerError)
 			return
@@ -531,6 +562,29 @@ func registerRESTRoutes(clientCtx client.Context, mux *runtime.ServeMux) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(respBytes)
+		//// 서명된 트랜잭션을 바이트로 인코딩
+		//txBytes, err := txCtx.TxConfig.TxEncoder()(txBuilder.GetTx())
+		//if err != nil {
+		//	http.Error(w, fmt.Sprintf("트랜잭션 인코딩 실패: %v", err), http.StatusInternalServerError)
+		//	return
+		//}
+		//
+		//// 트랜잭션 브로드캐스트
+		//resp, err := txCtx.BroadcastTx(txBytes)
+		//if err != nil {
+		//	http.Error(w, fmt.Sprintf("트랜잭션 브로드캐스트 실패: %v", err), http.StatusInternalServerError)
+		//	return
+		//}
+		//
+		//// 응답 반환
+		//respBytes, err := json.MarshalIndent(resp, "", "  ")
+		//if err != nil {
+		//	http.Error(w, fmt.Sprintf("응답 인코딩 실패: %v", err), http.StatusInternalServerError)
+		//	return
+		//}
+		//
+		//w.Header().Set("Content-Type", "application/json")
+		//w.Write(respBytes)
 	})
 }
 

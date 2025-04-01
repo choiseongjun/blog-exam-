@@ -35,8 +35,8 @@ func (k Keeper) ListPost(ctx context.Context, req *types.QueryListPostRequest) (
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	var post types.Post
-	if len(posts) > 0 {
+	/*if len(posts) > 0 {
 		post = posts[0]
-	}
+	}*/
 	return &types.QueryListPostResponse{Post: &post, Pagination: pageRes}, nil
 }
