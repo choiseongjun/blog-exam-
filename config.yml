@@ -26,3 +26,13 @@ validators:
   bonded: 200000000stake
 - name: validator3
   bonded: 300000000stake
+
+  grpc:
+    enable: true
+    address: "0.0.0.0:9090"
+
+  api:
+    enable: true
+    swagger: true
+    address: "tcp://0.0.0.0:1317"
+    enable-unsafe-cors: true  # 개발 환경에서만 사용
